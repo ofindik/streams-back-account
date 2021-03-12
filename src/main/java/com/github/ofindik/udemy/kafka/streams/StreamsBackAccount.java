@@ -1,15 +1,14 @@
 package com.github.ofindik.udemy.kafka.streams;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ofindik.udemy.kafka.streams.pojo.BalanceInfo;
+import com.github.ofindik.udemy.kafka.streams.pojo.BankRequest;
+import com.github.ofindik.udemy.kafka.streams.serdes.CustomSerdes;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.kstream.Grouped;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.*;
 
 import java.util.Properties;
 
@@ -19,8 +18,6 @@ public class StreamsBackAccount {
 		config.put (StreamsConfig.APPLICATION_ID_CONFIG, "streams-bank-account");
 		config.put (StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
 		config.put (ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-		config.put (StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String ().getClass ());
-		config.put (StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String ().getClass ());
 
 		// we disable the cache to demonstrate all the "steps" involved in the transformation - not recommended in prod
 		config.put (StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
@@ -29,16 +26,17 @@ public class StreamsBackAccount {
 
 		StreamsBuilder streamsBuilder = new StreamsBuilder ();
 		// 1 - Read one topic from Kafka (KStream)
-		KStream<String, String> bankAccountStream = streamsBuilder.stream ("bank-account-input");
+		KStream<String, BankRequest> bankAccountStream = streamsBuilder.stream ("bank-account-input",
+			Consumed.with (Serdes.String (), CustomSerdes.BankRequest ()));
 		// 2 - gropuByKey
-		bankAccountStream.groupByKey (Grouped.with (Serdes.String (), Serdes.String ()))
+		bankAccountStream.groupByKey (Grouped.with (Serdes.String (), CustomSerdes.BankRequest ()))
 			// 3 - aggregate
 			.aggregate (() -> getInitialBalanceInfo (),
 				(name, bankRequest, balanceInfo) -> getBalanceInfo (bankRequest, balanceInfo),
-				Materialized.with (Serdes.String (), Serdes.String ())
+				Materialized.with (Serdes.String (), CustomSerdes.BalanceInfo ())
 			)
 			// 4 - Write to Kafka
-			.toStream ().to ("bank-account-output");
+			.toStream ().to ("bank-account-output", Produced.with (Serdes.String (), CustomSerdes.BalanceInfo ()));
 
 		KafkaStreams kafkaStreams = new KafkaStreams (streamsBuilder.build (), config);
 		kafkaStreams.start ();
@@ -47,31 +45,17 @@ public class StreamsBackAccount {
 		Runtime.getRuntime ().addShutdownHook (new Thread (kafkaStreams::close));
 	}
 
-	private static String getInitialBalanceInfo () {
+	private static BalanceInfo getInitialBalanceInfo () {
 		BalanceInfo initialBalanceInfo = new BalanceInfo ();
 		initialBalanceInfo.setBalance (0);
 		initialBalanceInfo.setTransactionCount (0);
-		try {
-			return new ObjectMapper ().writeValueAsString (initialBalanceInfo);
-		} catch (JsonProcessingException e) {
-			e.printStackTrace ();
-			return null;
-		}
+		return initialBalanceInfo;
 	}
 
-	private static String getBalanceInfo (String bankRequestString, String balanceInfoString) {
-		ObjectMapper objectMapper = new ObjectMapper ();
-		try {
-			BankRequest bankRequest = objectMapper.readValue (bankRequestString, BankRequest.class);
-			BalanceInfo balanceInfo = objectMapper.readValue (balanceInfoString, BalanceInfo.class);
-
-			BalanceInfo result = new BalanceInfo ();
-			result.setBalance (bankRequest.getAmount () + balanceInfo.getBalance ());
-			result.setTransactionCount (balanceInfo.getTransactionCount () + 1);
-			return objectMapper.writeValueAsString (result);
-		} catch (JsonProcessingException e) {
-			e.printStackTrace ();
-			return null;
-		}
+	private static BalanceInfo getBalanceInfo (Object bankRequest, Object balanceInfo) {
+		BalanceInfo result = new BalanceInfo ();
+		result.setBalance (((BankRequest) bankRequest).getAmount () + ((BalanceInfo) balanceInfo).getBalance ());
+		result.setTransactionCount (((BalanceInfo) balanceInfo).getTransactionCount () + 1);
+		return result;
 	}
 }

@@ -1,4 +1,4 @@
-package com.github.ofindik.udemy.kafka.streams;
+package com.github.ofindik.udemy.kafka.streams.pojo;
 
 public class BankRequest {
 	private String name;
