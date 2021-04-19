@@ -12,7 +12,7 @@ import org.apache.kafka.streams.kstream.*;
 
 import java.util.Properties;
 
-public class StreamsBackAccount {
+public class StreamsBankAccount {
 	public static void main (String[] args) {
 		Properties config = new Properties ();
 		config.put (StreamsConfig.APPLICATION_ID_CONFIG, "streams-bank-account");

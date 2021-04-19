@@ -76,7 +76,7 @@
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>com.github.ofindik.udemy.kafka.streams.StreamsBackAccount</mainClass>
+                            <mainClass>com.github.ofindik.udemy.kafka.streams.StreamsBankAccount</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
