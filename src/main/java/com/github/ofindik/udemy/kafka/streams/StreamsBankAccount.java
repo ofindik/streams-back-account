@@ -8,6 +8,7 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.*;
 
 import java.util.Properties;
@@ -24,21 +25,9 @@ public class StreamsBankAccount {
 
 		config.put (StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE);
 
-		StreamsBuilder streamsBuilder = new StreamsBuilder ();
-		// 1 - Read one topic from Kafka (KStream)
-		KStream<String, BankRequest> bankAccountStream = streamsBuilder.stream ("bank-account-input",
-			Consumed.with (Serdes.String (), CustomSerdes.BankRequest ()));
-		// 2 - gropuByKey
-		bankAccountStream.groupByKey (Grouped.with (Serdes.String (), CustomSerdes.BankRequest ()))
-			// 3 - aggregate
-			.aggregate (() -> getInitialBalanceInfo (),
-				(name, bankRequest, balanceInfo) -> getBalanceInfo (bankRequest, balanceInfo),
-				Materialized.with (Serdes.String (), CustomSerdes.BalanceInfo ())
-			)
-			// 4 - Write to Kafka
-			.toStream ().to ("bank-account-output", Produced.with (Serdes.String (), CustomSerdes.BalanceInfo ()));
+		StreamsBankAccount streamsBankAccount = new StreamsBankAccount ();
 
-		KafkaStreams kafkaStreams = new KafkaStreams (streamsBuilder.build (), config);
+		KafkaStreams kafkaStreams = new KafkaStreams (streamsBankAccount.createTopology (), config);
 		kafkaStreams.start ();
 
 		// shutdown hook to correctly close the streams application
@@ -57,5 +46,23 @@ public class StreamsBankAccount {
 		result.setBalance (((BankRequest) bankRequest).getAmount () + ((BalanceInfo) balanceInfo).getBalance ());
 		result.setTransactionCount (((BalanceInfo) balanceInfo).getTransactionCount () + 1);
 		return result;
+	}
+
+	public Topology createTopology () {
+		StreamsBuilder streamsBuilder = new StreamsBuilder ();
+		// 1 - Read one topic from Kafka (KStream)
+		KStream<String, BankRequest> bankAccountStream = streamsBuilder.stream ("bank-account-input",
+			Consumed.with (Serdes.String (), CustomSerdes.BankRequest ()));
+		// 2 - gropuByKey
+		bankAccountStream.groupByKey (Grouped.with (Serdes.String (), CustomSerdes.BankRequest ()))
+			// 3 - aggregate
+			.aggregate (() -> getInitialBalanceInfo (),
+				(name, bankRequest, balanceInfo) -> getBalanceInfo (bankRequest, balanceInfo),
+				Materialized.with (Serdes.String (), CustomSerdes.BalanceInfo ())
+			)
+			// 4 - Write to Kafka
+			.toStream ().to ("bank-account-output", Produced.with (Serdes.String (), CustomSerdes.BalanceInfo ()));
+
+		return streamsBuilder.build ();
 	}
 }
